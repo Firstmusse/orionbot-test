@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Отчёты</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Отчёты">
+<style>
+:root{--bg:#f5f5f7;--card:#fff;--text:#111;--muted:#777;--line:#d9d9de;--accent:#2563eb;--ok:#16a34a;--err:#dc2626;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#000;--card:#1c1c1e;--text:#f2f2f7;--muted:#98989f;--line:#3a3a3c;--accent:#3b82f6;color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font-family:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);
+padding:calc(env(safe-area-inset-top,0px) + 16px) 16px calc(env(safe-area-inset-bottom,0px) + 24px);max-width:560px;margin:0 auto}
+h2{font-size:20px;margin:0 0 12px}
+.card{background:var(--card);border-radius:16px;padding:16px;margin-bottom:16px;display:flex;flex-direction:column;gap:12px}
+input[type=text],input[type=tel],input[type=password],textarea{width:100%;font-size:16px;padding:12px;border:1px solid var(--line);border-radius:10px;background:transparent;color:var(--text);font-family:inherit}
+textarea{min-height:90px;resize:vertical}
+.row{display:flex;gap:10px}
+.btn{flex:1;display:block;text-align:center;background:var(--accent);color:#fff;border:0;border-radius:10px;padding:14px;font-size:16px;font-weight:600;cursor:pointer}
+.btn.sec{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+.btn:disabled{opacity:.5}
+#preview{width:100%;max-height:300px;object-fit:cover;border-radius:12px;display:none}
+.hint{color:var(--muted);font-size:13px;margin:0}
+#status{position:fixed;left:16px;right:16px;bottom:calc(env(safe-area-inset-bottom,0px) + 12px);padding:12px 14px;border-radius:12px;color:#fff;font-weight:600;display:none;text-align:center;max-width:528px;margin:0 auto}
+#status.ok{background:var(--ok)}#status.err{background:var(--err)}
+details summary{cursor:pointer;font-weight:600}
+input[type=file]{display:none}
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h2>Фото → Telegram</h2>
+  <div class="row">
+    <label class="btn sec" for="cam">Камера</label>
+    <label class="btn sec" for="gal">Галерея</label>
+  </div>
+  <input type="file" id="cam" accept="image/*" capture="environment">
+  <input type="file" id="gal" accept="image/*">
+  <img id="preview" alt="">
+  <textarea id="caption" placeholder="Текст к фото"></textarea>
+  <button class="btn" id="sendTg">Отправить в Telegram</button>
+</div>
+
+<div class="card">
+  <h2>Google Docs</h2>
+  <input type="text" id="client" placeholder="Клиент">
+  <input type="tel" id="number" placeholder="Номер клиента">
+  <button class="btn" id="sendDoc">Добавить в таблицу</button>
+  <p class="hint">Две правые колонки в документе остаются пустыми, их заполняешь вручную.</p>
+</div>
+
+<details class="card">
+  <summary>⚙ Настройки</summary>
+  <input type="password" id="token" placeholder="Токен Telegram-бота">
+  <input type="text" id="chat" placeholder="ID группы (например -1001234567890)">
+  <input type="text" id="script" placeholder="URL веб-приложения Google Script">
+  <button class="btn" id="save">Сохранить</button>
+  <p class="hint">Данные хранятся только в памяти этого устройства, в код на GitHub они не попадают.</p>
+</details>
+
+<div id="status"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const store = {
+  get(k){ try { return localStorage.getItem(k) || ''; } catch(e){ return ''; } },
+  set(k,v){ try { localStorage.setItem(k,v); } catch(e){} }
+};
+let photo = null;
+
+['token','chat','script'].forEach(k => $(k).value = store.get(k));
+$('save').onclick = () => {
+  ['token','chat','script'].forEach(k => store.set(k, $(k).value.trim()));
+  toast('Настройки сохранены', true);
+};
+
+function toast(msg, ok){
+  const s = $('status');
+  s.textContent = msg; s.className = ok ? 'ok' : 'err'; s.style.display = 'block';
+  clearTimeout(toast.t); toast.t = setTimeout(() => s.style.display = 'none', 3500);
+}
+
+function onPhoto(e){
+  const f = e.target.files[0];
+  if(!f) return;
+  photo = f;
+  const p = $('preview');
+  p.src = URL.createObjectURL(f);
+  p.style.display = 'block';
+}
+$('cam').onchange = onPhoto;
+$('gal').onchange = onPhoto;
+
+$('sendTg').onclick = async () => {
+  const token = store.get('token'), chat = store.get('chat');
+  if(!token || !chat) return toast('Заполни настройки', false);
+  if(!photo) return toast('Выбери фото', false);
+  const b = $('sendTg'); b.disabled = true;
+  try{
+    const fd = new FormData();
+    fd.append('chat_id', chat);
+    fd.append('caption', $('caption').value.slice(0,1024));
+    fd.append('photo', photo, 'photo.jpg');
+    const r = await fetch('https://api.telegram.org/bot' + token + '/sendPhoto', {method:'POST', body: fd});
+    const j = await r.json();
+    if(!j.ok) throw new Error(j.description);
+    toast('Отправлено в Telegram', true);
+    photo = null; $('preview').style.display = 'none';
+    $('caption').value = ''; $('cam').value = ''; $('gal').value = '';
+  }catch(e){ toast('Ошибка Telegram: ' + e.message, false); }
+  b.disabled = false;
+};
+
+$('sendDoc').onclick = async () => {
+  const url = store.get('script');
+  const client = $('client').value.trim(), number = $('number').value.trim();
+  if(!url) return toast('Заполни настройки', false);
+  if(!client && !number) return toast('Заполни клиента и номер', false);
+  const b = $('sendDoc'); b.disabled = true;
+  try{
+    const r = await fetch(url, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({client, number})
+    });
+    const j = await r.json();
+    if(!j.ok) throw new Error(j.error || 'Ошибка скрипта');
+    toast('Добавлено в Google Docs', true);
+    $('client').value = ''; $('number').value = '';
+  }catch(e){ toast('Ошибка Google Docs: ' + e.message, false); }
+  b.disabled = false;
+};
+</script>
+</body>
+</html>
