@@ -103,6 +103,10 @@ $('gal').onchange = onPhoto;
 // галочки взаимоисключающие
 $('chkVisit').onchange = () => { if($('chkVisit').checked) $('chkReg').checked = false; };
 $('chkReg').onchange = () => { if($('chkReg').checked) $('chkVisit').checked = false; };
+const todayStr = () => {
+  const n = new Date(), p = x => String(x).padStart(2,'0');
+  return p(n.getDate()) + '.' + p(n.getMonth()+1) + '.' + String(n.getFullYear()).slice(-2);
+};
 const colorValue = () => $('chkVisit').checked ? 'green' : $('chkReg').checked ? 'blue' : 'orange';
 
 async function sendTelegram(token, chat, text){
@@ -142,7 +146,8 @@ $('send').onclick = async () => {
     number: $('number').value.trim(),
     lpr: $('lpr').value.trim(),
     text: $('text').value.trim(),
-    color: colorValue()
+    color: colorValue(),
+    date: todayStr()
   };
   if(!token || !chat || !url) return toast('Заполни настройки', false);
   if(!data.client && !data.number) return toast('Заполни клиента или номер', false);
